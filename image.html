@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>精准大小图片生成器（可视化+多格式）</title>
+<style>
+    *{margin:0;padding:0;box-sizing:border-box;font-family: system-ui, sans-serif;}
+    body{padding:40px;background:#f7f8fa;display:grid;place-items:center;}
+    .card{
+        background:white;
+        padding:30px;
+        border-radius:16px;
+        box-shadow:0 4px 20px #00000010;
+        width:100%;max-width:560px;
+    }
+    h2{margin-bottom:20px;color:#222;}
+    .item{margin:14px 0;}
+    label{display:inline-block;width:110px;font-weight:500;}
+    input, select{
+        width:260px;
+        padding:10px 12px;
+        border:1px solid #ddd;
+        border-radius:8px;
+        font-size:14px;
+    }
+    .btns{margin:20px 0;display:flex;gap:12px;}
+    button{
+        flex:1;
+        padding:12px;
+        border:none;
+        border-radius:8px;
+        font-size:15px;
+        cursor:pointer;
+    }
+    #gen{background:#1677ff;color:white;}
+    #down{background:#00b42a;color:white;}
+    #preview{
+        margin:20px 0;
+        max-width:100%;
+        max-height:300px;
+        border:1px solid #eee;
+        border-radius:8px;
+        display:none;
+    }
+    .info{
+        padding:12px;
+        background:#f6f7f9;
+        border-radius:8px;
+        font-size:15px;
+        line-height:1.5;
+    }
+</style>
+</head>
+<body>
+<div class="card">
+    <h2>可视化精准图片生成器</h2>
+
+    <div class="item">
+        <label>宽度(px)：</label>
+        <input type="number" id="w" value="1000">
+    </div>
+    <div class="item">
+        <label>高度(px)：</label>
+        <input type="number" id="h" value="1000">
+    </div>
+    <div class="item">
+        <label>目标大小(MB)：</label>
+        <input type="number" step="0.01" id="targetMb" value="2.00">
+    </div>
+    <div class="item">
+        <label>图片格式：</label>
+        <select id="ext">
+            <option value="png">PNG</option>
+            <option value="jpg">JPG</option>
+            <option value="webp">WebP</option>
+        </select>
+    </div>
+
+    <div class="btns">
+        <button id="gen">生成图片</button>
+        <button id="down">下载图片</button>
+    </div>
+
+    <img id="preview" alt="预览">
+    <div class="info" id="log"></div>
+</div>
+
+<script>
+let finalBlob = null;
+const canvas = document.createElement('canvas');
+const ctx = canvas.getContext('2d');
+const preview = document.getElementById('preview');
+const log = document.getElementById('log');
+
+// MB → 字节
+function mbToBytes(mb) {
+    return Math.round(mb * 1048576);
+}
+
+// 生成随机彩色图片（可视化）
+function drawImage(w, h) {
+    canvas.width = w;
+    canvas.height = h;
+    const gradient = ctx.createLinearGradient(0,0,w,h);
+    gradient.addColorStop(0, "#4158D0");
+    gradient.addColorStop(1, "#C850C0");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0,0,w,h);
+}
+
+// 生成精准大小文件
+async function create() {
+    const w = parseInt(document.getElementById('w').value);
+    const h = parseInt(document.getElementById('h').value);
+    const targetMb = parseFloat(document.getElementById('targetMb').value);
+    const ext = document.getElementById('ext').value;
+    const targetSize = mbToBytes(targetMb);
+
+    if (!w || !h || targetMb <= 0) {
+        alert("请输入正确数值");
+        return;
+    }
+
+    // 画可视化图片
+    drawImage(w, h);
+
+    // 导出基础图片
+    const mimeType = ext === 'jpg' ? 'image/jpeg' : ext === 'webp' ? 'image/webp' : 'image/png';
+    const baseBlob = await new Promise(res => canvas.toBlob(res, mimeType, 0.9));
+    const baseBuffer = await baseBlob.arrayBuffer();
+
+    // 计算需要补齐的字节
+    let need = targetSize - baseBuffer.byteLength;
+    if (need < 0) need = 0;
+
+    // 补齐数据，精准达到目标大小
+    const extra = new Uint8Array(need);
+    for (let i = 0; i < need; i++) extra[i] = Math.random() * 255 | 0;
+
+    const total = new Uint8Array(baseBuffer.byteLength + need);
+    total.set(new Uint8Array(baseBuffer), 0);
+    total.set(extra, baseBuffer.byteLength);
+
+    finalBlob = new Blob([total], { type: mimeType });
+    const realMb = (finalBlob.size / 1048576).toFixed(3);
+
+    // 显示预览
+    preview.src = URL.createObjectURL(finalBlob);
+    preview.style.display = "block";
+
+    log.innerHTML = `
+        目标大小：${targetMb} MB<br>
+        实际大小：${realMb} MB<br>
+        格式：${ext.toUpperCase()} | 尺寸：${w}×${h}
+    `;
+}
+
+// 下载
+function download() {
+    if (!finalBlob) {
+        alert("请先生成图片");
+        return;
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(finalBlob);
+    const ext = document.getElementById('ext').value;
+    a.download = `精准图片_${document.getElementById('targetMb').value}MB.${ext}`;
+    a.click();
+}
+
+// 绑定按钮
+document.getElementById('gen').onclick = create;
+document.getElementById('down').onclick = download;
+</script>
+</body>
+</html>
